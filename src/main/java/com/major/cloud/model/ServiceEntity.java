@@ -26,4 +26,5 @@ public class ServiceEntity {
     private Integer maxReplicas;
 
     private String status; // RUNNING, STOPPED
+    //model
 }
