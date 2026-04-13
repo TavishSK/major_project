@@ -5,31 +5,37 @@ import com.major.cloud.dto.ServiceResponseDTO;
 import com.major.cloud.exception.ResourceNotFoundException;
 import com.major.cloud.model.ServiceEntity;
 import com.major.cloud.repository.ServiceRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class ServiceService {
 
     private final ServiceRepository serviceRepository;
 
+    public ServiceService(ServiceRepository serviceRepository) {
+        this.serviceRepository = serviceRepository;
+    }
+
     public ServiceResponseDTO createService(ServiceRequestDTO request) {
 
-        ServiceEntity entity = ServiceEntity.builder()
-                .serviceName(request.getServiceName())
-                .dockerImage(request.getDockerImage())
-                .minReplicas(request.getMinReplicas())
-                .maxReplicas(request.getMaxReplicas())
-                .status("RUNNING")
-                .build();
+        ServiceEntity entity = new ServiceEntity();
 
-        ServiceEntity saved = serviceRepository.save(entity);
+        entity.setServiceName(request.getServiceName());
+        entity.setDockerImage(request.getDockerImage());
+        entity.setMinReplicas(request.getMinReplicas());
+        entity.setMaxReplicas(request.getMaxReplicas());
+        entity.setStatus("RUNNING");
 
-        return mapToResponse(saved);
+        entity.setCurrentReplicas(1);
+        entity.setCpuUsage(0);
+        entity.setResponseTime(0.0);
+        entity.setScalingEvents(0);
+        entity.setStrategy(request.getStrategy() != null ? request.getStrategy() : "CPU");
+
+        return mapToResponse(serviceRepository.save(entity));
     }
 
     public List<ServiceResponseDTO> getAllServices() {
@@ -50,13 +56,22 @@ public class ServiceService {
     }
 
     private ServiceResponseDTO mapToResponse(ServiceEntity entity) {
-        return ServiceResponseDTO.builder()
-                .id(entity.getId())
-                .serviceName(entity.getServiceName())
-                .dockerImage(entity.getDockerImage())
-                .minReplicas(entity.getMinReplicas())
-                .maxReplicas(entity.getMaxReplicas())
-                .status(entity.getStatus())
-                .build();
+
+        ServiceResponseDTO dto = new ServiceResponseDTO();
+
+        dto.setId(entity.getId());
+        dto.setServiceName(entity.getServiceName());
+        dto.setDockerImage(entity.getDockerImage());
+        dto.setMinReplicas(entity.getMinReplicas());
+        dto.setMaxReplicas(entity.getMaxReplicas());
+        dto.setStatus(entity.getStatus());
+
+        dto.setCurrentReplicas(entity.getCurrentReplicas());
+        dto.setCpuUsage(entity.getCpuUsage());
+        dto.setResponseTime(entity.getResponseTime());
+        dto.setScalingEvents(entity.getScalingEvents());
+        dto.setStrategy(entity.getStrategy());
+
+        return dto;
     }
 }
