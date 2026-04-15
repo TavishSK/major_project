@@ -38,9 +38,9 @@ public class MonitoringScheduler {
                 service.setCurrentReplicas(1);
             }
 
+            // 🔥 FIXED LINE (REMOVED cpu PARAMETER)
             int newReplicas = scalingService.applyStrategy(
                     service.getStrategy(),
-                    cpu,
                     service.getCurrentReplicas()
             );
 
