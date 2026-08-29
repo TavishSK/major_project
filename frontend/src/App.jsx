@@ -656,26 +656,23 @@ export default function App() {
   // ── Run experiment ─────────────────────────────────────────────────────────
   const run = async () => {
     setLoad(true); setError(null); setProg(0);
-    const dur = dockerImg ? 30 : 10;
+    const dur = 10;
     let step=0;
     progRef.current = setInterval(()=>{ step++; setProg(Math.min(95, Math.round((step/dur)*100))); }, 1000);
-    toast('Experiment started — sampling real server metrics…','INFO');
+    toast('🧪 Sampling real server metrics for 10s…','INFO');
     try {
-      const payload = { strategies:['CPU','TREND','LATENCY'] };
-      if (dockerImg) payload.dockerImage = dockerImg;
       const r = await fetch(`${API}/api/experiment`, {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ strategies:['CPU','TREND','LATENCY'] }),
       });
       clearInterval(progRef.current); setProg(100);
       let data; try { data=await r.json(); } catch { data=null; }
       if (!r.ok) { throw new Error(data?.message||data?.error||`Server error ${r.status}`); }
       if (data?.error && !data?.strategies) { throw new Error(data.message||data.error); }
-      if (!data || !data.bestStrategy) { throw new Error('Empty response from server. Check Render backend logs.'); }
+      if (!data || !data.bestStrategy) { throw new Error('Empty response. Check Render backend logs.'); }
       setResult(data);
       setPage('results');
-      toast(`✅ Experiment complete! Winner: ${data.bestStrategy} (${data.dockerMode||'SIMULATION'})`,'INFO');
-      if (data.dockerNote) toast(`ℹ️ ${data.dockerNote}`,'INFO');
+      toast(`✅ Winner: ${data.bestStrategy} — ${fmt(data.averageResponseTime)}ms avg latency`,'INFO');
       setConfetti(true); setTimeout(()=>setConfetti(false), 100);
     } catch(e) {
       clearInterval(progRef.current);
@@ -685,7 +682,7 @@ export default function App() {
       setError(msg); toast(msg,'CRITICAL');
     } finally { setLoad(false); setProg(0); }
   };
-  runRef.current = run; // keep ref fresh for hero screen
+  runRef.current = run;
 
   // ── Load gen toggle ────────────────────────────────────────────────────────
   const toggleLoad = async () => {
@@ -927,91 +924,84 @@ export default function App() {
                         return (
                           <div key={s.strategy} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'8px' }}>
                             <Gauge pct={s.uptimePct} color={m.color} label={m.label}/>
-                            <span style={{ fontSize:'12px', fontWeight:800, color:SLA_COLOR(s.slaGrade) }}>{s.slaGrade}</span>
-                            <span style={{ fontSize:'10px', color:'#334155' }}>{fmt(s.uptimePct)}% uptime</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </Card>
-                )}
-
-                {history.length>0 && (
-                  <Card>
-                    <SectionHead icon="🕐" title="Recent Experiments" right={<button onClick={()=>setPage('history')} style={{ fontSize:'11px', color:'#a5b4fc', background:'none', border:'none', cursor:'pointer' }}>View all →</button>}/>
-                    {history.slice(0,5).map((h,i)=>{
-                      const m=STRAT[h.bestStrategy]||STRAT.CPU;
-                      return (
-                        <div key={i} onClick={()=>{setResult(h);setPage('results');}}
-                          style={{ display:'flex', alignItems:'center', gap:'12px', padding:'9px 10px', borderRadius:'9px', cursor:'pointer', transition:'background 0.15s', marginBottom:'4px' }}
-                          onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.04)'}
-                          onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                          <span style={{ fontSize:'11px', color:'#1e293b', fontFamily:'monospace', minWidth:'70px' }}>{new Date(h.runAt||0).toLocaleTimeString()}</span>
-                          <span style={{ fontWeight:700, color:m.light, fontSize:'12px' }}>{m.icon} {h.bestStrategy} won</span>
-                          <span style={{ fontSize:'11px', color:'#334155' }}>CPU {h.peakCpuUsage}% peak</span>
-                          <span style={{ marginLeft:'auto', fontSize:'11px', color:'#a5b4fc' }}>View →</span>
-                        </div>
-                      );
-                    })}
-                  </Card>
-                )}
-              </div>
-            )}
-
-            {/* ════════ MONITOR ════════ */}
-            {page==='monitor' && (
-              <div style={{ display:'flex', flexDirection:'column', gap:'16px', animation:'fadeIn 0.3s ease' }}>
-                <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                  <KPI icon="🖥" label="CPU"      value={fmt(snap?.cpuUsage)}   unit="%" color="#60a5fa" spark={cpuHist}/>
-                  <KPI icon="🧠" label="Memory"   value={fmt(snap?.memoryUsage)} unit="%" color="#a78bfa" spark={memHist}/>
-                  <KPI icon="⚡" label="Load Gen" value={loadActive?'ACTIVE':'OFF'} color={loadActive?'#ef4444':'#475569'} sub="CPU stress test"/>
-                  <KPI icon="🔌" label="Stream"   value={connected?'SSE':'POLL'} color={connected?'#34d399':'#fbbf24'}/>
-                </div>
-                <Card>
-                  <SectionHead icon="📈" title={`Live System Metrics — last ${MAX_LIVE} samples`} right={
-                    <div style={{ display:'flex', gap:'14px' }}>
-                      {[{l:'CPU',c:'#60a5fa'},{l:'Memory',c:'#a78bfa'}].map(x=>(
-                        <div key={x.l} style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'11px', color:'#475569' }}>
-                          <div style={{ width:'18px', height:'2px', background:x.c, borderRadius:'1px' }}/>{x.l}
-                        </div>
-                      ))}
-                    </div>
-                  }/>
-                  <Chart series={[{key:'cpu',data:cpuHist,color:'#60a5fa'},{key:'mem',data:memHist,color:'#a78bfa'}]} height={180} label="%"/>
-                </Card>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(270px,1fr))', gap:'12px' }}>
+                            <span style={{ fontSize:'12px', fontWeight:800, color:SLA_COLOR(s.slaGrade) }}>{s.slaGrade}</span            {/* ════════ EXPERIMENT ════════ */}
+            {page==='experiment' && (
+              <div style={{ display:'flex', flexDirection:'column', gap:'16px', maxWidth:'700px', margin:'0 auto', animation:'fadeIn 0.3s ease' }}>
+                {/* Strategy cards */}
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'10px' }}>
                   {Object.entries(STRAT).map(([key,m])=>(
-                    <Card key={key} style={{ border:`1px solid ${m.color}18`, transition:'border-color 0.2s', cursor:'default' }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'10px' }}>
-                        <span style={{ fontSize:'24px' }}>{m.icon}</span>
-                        <span style={{ fontWeight:800, color:m.light, fontSize:'14px' }}>{m.label}</span>
+                    <div key={key} style={{ padding:'16px', borderRadius:'12px', background:`${m.color}08`, border:`1px solid ${m.color}25`, textAlign:'center' }}>
+                      <div style={{ fontSize:'24px', marginBottom:'6px' }}>{m.icon}</div>
+                      <div style={{ fontWeight:800, color:m.light, fontSize:'13px', marginBottom:'4px' }}>{key}</div>
+                      <div style={{ fontSize:'10px', color:'#334155', lineHeight:1.6 }}>
+                        {key==='CPU'    &&'Scales on CPU usage threshold'}
+                        {key==='TREND'  &&'Predicts CPU acceleration'}
+                        {key==='LATENCY'&&'Reacts to response time spikes'}
                       </div>
-                      <p style={{ fontSize:'12px', color:'#475569', lineHeight:1.8 }}>
-                        {key==='CPU'    &&'Reactive scaling based on real CPU utilisation. Scales up when CPU > 75%, scales down when < 30%.'}
-                        {key==='TREND'  &&'Predictive scaling on CPU growth rate. Detects acceleration and scales before overload occurs.'}
-                        {key==='LATENCY'&&'Aggressive response-time scaling. Adds 3 replicas instantly when latency spikes above threshold.'}
-                      </p>
-                    </Card>
+                    </div>
                   ))}
                 </div>
-              </div>
-            )}
 
-            {/* ════════ EXPERIMENT ════════ */}
-            {page==='experiment' && (
-              <div style={{ display:'flex', flexDirection:'column', gap:'16px', maxWidth:'660px', margin:'0 auto', animation:'fadeIn 0.3s ease' }}>
                 <Card style={{ border:'1px solid #1e293b' }}>
-                  <h2 style={{ fontSize:'18px', fontWeight:900, color:'#e2e8f0', marginBottom:'6px' }}>🧪 Run an Experiment</h2>
-                  <p style={{ fontSize:'13px', color:'#475569', marginBottom:'22px', lineHeight:1.8 }}>
-                    CloudScale samples {dockerImg?'30':'10'} seconds of real server metrics and simulates all 3 strategies simultaneously against the same traffic wave.
+                  <h2 style={{ fontSize:'18px', fontWeight:900, color:'#e2e8f0', marginBottom:'8px' }}>🧪 Run Experiment</h2>
+                  <p style={{ fontSize:'13px', color:'#475569', marginBottom:'24px', lineHeight:1.8 }}>
+                    CloudScale samples <strong style={{color:'#60a5fa'}}>10 seconds</strong> of real server metrics and simulates all 3 strategies
+                    against the same traffic wave — measuring latency, replicas, cost, and SLA compliance.
                   </p>
 
-                  <label style={{ display:'block', fontSize:'12px', color:'#94a3b8', fontWeight:700, marginBottom:'8px' }}>
-                    🐳 Docker Image <span style={{ color:'#1e293b', fontWeight:400 }}>(optional — leave blank for instant simulation)</span>
-                  </label>
-                  {IS_RENDER && (
-                    <div style={{ background:'rgba(251,191,36,0.07)', border:'1px solid rgba(251,191,36,0.25)', borderRadius:'10px', padding:'10px 14px', marginBottom:'12px', display:'flex', gap:'8px', alignItems:'flex-start' }}>
-                      <span style={{ fontSize:'15px', flexShrink:0 }}>⚠️</span>
+                  {loading && (
+                    <div style={{ textAlign:'center', padding:'28px' }}>
+                      <div style={{ fontSize:'48px', marginBottom:'12px', animation:'spin 1.5s linear infinite', display:'inline-block' }}>⚙️</div>
+                      <p style={{ color:'#94a3b8', fontSize:'15px', fontWeight:700, marginBottom:'16px' }}>Sampling real server metrics…</p>
+                      <ProgressBar value={progress} color="#3b82f6"/>
+                      <p style={{ color:'#475569', fontSize:'12px', marginTop:'10px' }}>{progress}% — 10s sampling window</p>
+                      <div style={{ display:'flex', justifyContent:'center', gap:'24px', marginTop:'20px' }}>
+                        {['📡 Sampling','⚙️ Simulating','📊 Calculating'].map((step,i)=>{
+                          const active = progress<35?i===0:progress<75?i===1:i===2;
+                          return (
+                            <div key={i} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'6px' }}>
+                              <div style={{ padding:'8px 14px', borderRadius:'8px', fontSize:'12px', fontWeight:700,
+                                background:active?'rgba(59,130,246,0.15)':'rgba(30,41,59,0.4)',
+                                border:`1px solid ${active?'rgba(59,130,246,0.4)':'#0f172a'}`,
+                                color:active?'#60a5fa':'#334155', transition:'all 0.3s' }}>{step}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {!loading && (
+                    <button onClick={run} style={{ width:'100%', padding:'16px', fontWeight:900, fontSize:'16px', color:'#fff',
+                      background:'linear-gradient(135deg,#3b82f6,#6366f1)', border:'none', borderRadius:'12px', cursor:'pointer',
+                      boxShadow:'0 8px 32px rgba(99,102,241,0.5)', transition:'all 0.2s', letterSpacing:'0.02em' }}
+                      onMouseEnter={e=>{e.currentTarget.style.transform='translateY(-2px)';e.currentTarget.style.boxShadow='0 16px 40px rgba(99,102,241,0.65)';}}
+                      onMouseLeave={e=>{e.currentTarget.style.transform='translateY(0)';e.currentTarget.style.boxShadow='0 8px 32px rgba(99,102,241,0.5)';}}>>
+                      ▶ Start Experiment (~10s)
+                    </button>
+                  )}
+                </Card>
+
+                <Card style={{ border:'1px solid #0f172a' }}>
+                  <SectionHead icon="📊" title="What You'll Get"/>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                    {[['🏆','Winner Podium','Best strategy ranked by latency + cost'],
+                      ['📈','Latency Analysis','P50 / P95 / P99 breakdown per strategy'],
+                      ['💰','Cost Comparison','AWS t3.small hourly + monthly projections'],
+                      ['🎯','SLA Compliance','% of requests within 500ms threshold'],
+                      ['⚡','Stability Score','How consistent replica counts stayed'],
+                      ['🤖','AI Recommendation','Plain-English explanation of the winner'],
+                    ].map(([ic,title,desc])=>(
+                      <div key={title} style={{ padding:'12px', background:'rgba(255,255,255,0.02)', borderRadius:'9px', border:'1px solid #0f172a' }}>
+                        <div style={{ fontSize:'16px', marginBottom:'4px' }}>{ic}</div>
+                        <div style={{ fontSize:'12px', fontWeight:700, color:'#94a3b8', marginBottom:'3px' }}>{title}</div>
+                        <div style={{ fontSize:'11px', color:'#334155', lineHeight:1.5 }}>{desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
+            )}️</span>
                       <p style={{ fontSize:'12px', color:'#fcd34d', lineHeight:1.7 }}>
                         <strong>Render Cloud:</strong> Docker daemon is not available on Render's free tier.
                         Any image you enter will be <strong>ignored</strong> and the experiment runs in fast
@@ -1082,24 +1072,41 @@ export default function App() {
               <Empty emoji="🧪" title="No experiment yet" sub="Run your first experiment to see strategy comparison, cost analysis, and SLA data." action="→ Go to Experiment" onClick={()=>setPage('experiment')}/>
             )}
 
-            {page==='results' && result && (
+            {page==='results' && result && (() => {
+              const strats = result.strategies || [];
+              const winner = strats.find(s=>s.strategy===result.bestStrategy) || strats[0] || {};
+              const worst  = strats[strats.length-1] || {};
+              return (
               <div style={{ display:'flex', flexDirection:'column', gap:'18px', animation:'fadeIn 0.3s ease' }}>
 
-                {/* KPI row */}
+                {/* ── Hero KPI row ── */}
                 <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                  <KPI icon="🏆" label="Winner"     value={result.bestStrategy||'—'} color={STRAT[result.bestStrategy]?.color||'#34d399'} badge="BEST"/>
-                  <KPI icon="🖥" label="Peak CPU"   value={fmt(result.peakCpuUsage)} unit="%" color="#f59e0b"/>
-                  <KPI icon="🧠" label="Peak RAM"   value={fmt(result.peakMemUsage)} unit="%" color="#a78bfa"/>
-                  <KPI icon="📊" label="Samples"    value={result.sampleCount||0} color="#60a5fa" sub="1s intervals"/>
-                  <KPI icon="💰" label="Best $/hr"  value={`$${(result.bestStrategyCostPerHour||0).toFixed(4)}`} color="#34d399" sub="AWS t3.small"/>
-                  <KPI icon="⏱" label="Best Latency" value={fmt(result.averageResponseTime)} unit="ms" color="#10b981"/>
+                  <KPI icon="🏆" label="Winner"       value={result.bestStrategy||'—'} color={STRAT[result.bestStrategy]?.color||'#34d399'} badge="BEST"/>
+                  <KPI icon="⏱" label="Best Latency"  value={fmt(winner.averageResponseTime)} unit="ms" color="#10b981" sub="avg response"/>
+                  <KPI icon="🎯" label="SLA Compliance" value={fmt(winner.slaCompliance)} unit="%" color="#34d399" sub="< 500ms"/>
+                  <KPI icon="💰" label="Monthly Cost"  value={`$${(winner.monthlyCost||0).toFixed(0)}`} color="#f59e0b" sub="AWS t3.small"/>
+                  <KPI icon="⚡" label="Stability"     value={fmt(winner.stabilityScore)} unit="/100" color="#a78bfa"/>
+                  <KPI icon="💾" label="Savings vs Worst" value={`$${(result.savingsVsWorst||0).toFixed(0)}`} color="#10b981" sub="monthly"/>
                 </div>
 
-                {/* Winner Podium */}
-                {result.strategies?.length>0 && (
+                {/* ── Winner Reasoning ── */}
+                {result.winnerReasoning && (
+                  <Card style={{ border:'1px solid rgba(52,211,153,0.25)', background:'rgba(52,211,153,0.04)' }}>
+                    <div style={{ display:'flex', gap:'12px', alignItems:'flex-start' }}>
+                      <div style={{ fontSize:'28px', flexShrink:0 }}>🤖</div>
+                      <div>
+                        <div style={{ fontSize:'13px', fontWeight:800, color:'#34d399', marginBottom:'6px' }}>AI Recommendation</div>
+                        <p style={{ fontSize:'13px', color:'#94a3b8', lineHeight:1.8, margin:0 }}>{result.winnerReasoning}</p>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {/* ── Podium ── */}
+                {strats.length>0 && (
                   <Card>
-                    <SectionHead icon="🏆" title="Strategy Comparison — Podium"/>
-                    <WinnerPodium strategies={result.strategies} costs={result.costAnalysis}/>
+                    <SectionHead icon="🏆" title="Strategy Podium — Ranked by Overall Score"/>
+                    <WinnerPodium strategies={strats} costs={[]}/>
                   </Card>
                 )}
 
